@@ -84,16 +84,16 @@ appInit cfg = makeSnaplet "aftok" "Aftok Time Tracker" Nothing $ do
         serveJSON (fmap qdbProjectJSON) $ method GET projectListHandler
       projectRoute = serveJSON projectJSON $ method GET projectGetHandler
       projectWorkIndexRoute =
-        serveJSON workIndexJSON $ method GET projectWorkIndex
+        serveJSON (workIndexJSON logEntryJSON) $ method GET projectWorkIndex
       projectPayoutsRoute =
         serveJSON payoutsJSON $ method GET payoutsHandler
       logWorkRoute f =
         serveJSON keyedLogEntryJSON $ method POST (logWorkHandler f)
       amendEventRoute = serveJSON amendmentIdJSON $ method PUT amendEventHandler
       userEventsRoute =
-        serveJSON (fmap logEntryJSON) $ method GET userEvents
+        serveJSON (fmap (logEntryJSON . snd)) $ method GET userEvents
       userWorkIndexRoute =
-        serveJSON workIndexJSON $ method GET userWorkIndex
+        serveJSON (workIndexJSON logEntryJSON) $ method GET userWorkIndex
       auctionCreateRoute =
         serveJSON auctionIdJSON $ method POST auctionCreateHandler
       auctionListRoute =

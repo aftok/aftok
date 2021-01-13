@@ -240,16 +240,16 @@ parsePayoutsJSON = unversion "Payouts" $ p
 -- WorkIndex
 --
 
-workIndexJSON :: WorkIndex -> Value
-workIndexJSON (WorkIndex widx) =
+workIndexJSON :: forall t. (t -> Value) -> WorkIndex t -> Value
+workIndexJSON leJSON (WorkIndex widx) =
   v2 $
     obj ["workIndex" .= fmap widxRec (MS.assocs widx)]
   where
-    widxRec :: (CreditTo, NonEmpty Interval) -> Value
+    widxRec :: (CreditTo, NonEmpty (Interval t)) -> Value
     widxRec (c, l) =
       object
         [ "creditTo" .= creditToJSON c,
-          "intervals" .= (intervalJSON <$> L.toList l)
+          "intervals" .= (intervalJSON leJSON <$> L.toList l)
         ]
 
 eventIdJSON :: EventId -> Value

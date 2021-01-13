@@ -183,13 +183,13 @@ findEvent (EventId eid) = do
           WHERE id = ? |]
       (Only eid)
 
-findEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBM [LogEntry]
+findEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBM [(EventId, LogEntry)]
 findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
   case rquery of
     (Before e) ->
       pquery
-        logEntryParser
-        [sql| SELECT credit_to_type,
+        ((,) <$> idParser EventId <*> logEntryParser)
+        [sql| SELECT id, credit_to_type,
                    credit_to_account, credit_to_user_id, credit_to_project_id,
                    event_type, event_time,
                    event_metadata
@@ -201,8 +201,8 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
         (pid, uid, fromThyme e, limit)
     (During s e) ->
       pquery
-        logEntryParser
-        [sql| SELECT credit_to_type,
+        ((,) <$> idParser EventId <*> logEntryParser)
+        [sql| SELECT id, credit_to_type,
                    credit_to_account, credit_to_user_id, credit_to_project_id,
                    event_type, event_time, event_metadata
             FROM work_events
@@ -214,8 +214,8 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
         (pid, uid, fromThyme s, fromThyme e, limit)
     (After s) ->
       pquery
-        logEntryParser
-        [sql| SELECT credit_to_type,
+        ((,) <$> idParser EventId <*> logEntryParser)
+        [sql| SELECT id, credit_to_type,
                    credit_to_account, credit_to_user_id, credit_to_project_id,
                    event_type, event_time, event_metadata
             FROM work_events
@@ -226,8 +226,8 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
         (pid, uid, fromThyme s, limit)
     (Always) ->
       pquery
-        logEntryParser
-        [sql| SELECT credit_to_type,
+        ((,) <$> idParser EventId <*> logEntryParser)
+        [sql| SELECT id, credit_to_type,
                    credit_to_account, credit_to_user_id, credit_to_project_id,
                    event_type, event_time, event_metadata
             FROM work_events
@@ -275,7 +275,7 @@ amendEvent (EventId eid) = \case
               VALUES (?, ?, ?) RETURNING id |]
       (eid, fromThyme $ mt ^. _ModTime, v)
 
-readWorkIndex :: ProjectId -> DBM WorkIndex
+readWorkIndex :: ProjectId -> DBM (WorkIndex LogEntry)
 readWorkIndex (ProjectId pid) = do
   logEntries <-
     pquery

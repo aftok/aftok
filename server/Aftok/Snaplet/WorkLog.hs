@@ -50,13 +50,13 @@ logWorkHandler evCtr = do
         (pure . (eid,))
         ev
 
-projectWorkIndex :: S.Handler App App WorkIndex
+projectWorkIndex :: S.Handler App App (WorkIndex LogEntry)
 projectWorkIndex = do
   uid <- requireUserId
   pid <- requireProjectId
   snapEval $ readWorkIndex pid uid
 
-userEvents :: S.Handler App App [LogEntry]
+userEvents :: S.Handler App App [(EventId, LogEntry)]
 userEvents = do
   uid <- requireUserId
   pid <- requireProjectId
@@ -64,8 +64,8 @@ userEvents = do
   limit <- Limit . fromMaybe 1 <$> decimalParam "limit"
   snapEval $ findEvents pid uid ival limit
 
-userWorkIndex :: S.Handler App App WorkIndex
-userWorkIndex = workIndex <$> userEvents
+userWorkIndex :: S.Handler App App (WorkIndex LogEntry)
+userWorkIndex = workIndex . fmap snd <$> userEvents
 
 payoutsHandler :: S.Handler App App FractionalPayouts
 payoutsHandler = do

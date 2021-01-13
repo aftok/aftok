@@ -78,8 +78,8 @@ data DBOp a where
   CreateEvent :: ProjectId -> UserId -> LogEntry -> DBOp EventId
   AmendEvent :: EventId -> EventAmendment -> DBOp AmendmentId
   FindEvent :: EventId -> DBOp (Maybe KeyedLogEntry)
-  FindEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBOp [LogEntry]
-  ReadWorkIndex :: ProjectId -> DBOp WorkIndex
+  FindEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBOp [(EventId, LogEntry)]
+  ReadWorkIndex :: ProjectId -> DBOp (WorkIndex LogEntry)
   ListAuctions :: ProjectId -> RangeQuery -> Limit -> DBOp [A.Auction Amount]
   CreateAuction :: A.Auction Amount -> DBOp A.AuctionId
   FindAuction :: A.AuctionId -> DBOp (Maybe (A.Auction Amount))
@@ -266,10 +266,10 @@ findEvents ::
   UserId ->
   RangeQuery ->
   Limit ->
-  m [LogEntry]
+  m [(EventId, LogEntry)]
 findEvents p u i l = liftdb $ FindEvents p u i l
 
-readWorkIndex :: (MonadDB m) => ProjectId -> UserId -> m WorkIndex
+readWorkIndex :: (MonadDB m) => ProjectId -> UserId -> m (WorkIndex LogEntry)
 readWorkIndex pid uid = withProjectAuth pid uid $ ReadWorkIndex pid
 
 -- Billing ops
