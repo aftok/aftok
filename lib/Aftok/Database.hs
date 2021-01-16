@@ -76,7 +76,7 @@ data DBOp a where
   FindInvitation :: InvitationCode -> DBOp (Maybe Invitation)
   AcceptInvitation :: UserId -> InvitationCode -> C.UTCTime -> DBOp ()
   CreateEvent :: ProjectId -> UserId -> LogEntry -> DBOp EventId
-  AmendEvent :: EventId -> EventAmendment -> DBOp AmendmentId
+  AmendEvent :: EventId -> KeyedLogEntry -> EventAmendment -> DBOp (EventId, AmendmentId)
   FindEvent :: EventId -> DBOp (Maybe KeyedLogEntry)
   FindEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBOp [(EventId, LogEntry)]
   ReadWorkIndex :: ProjectId -> DBOp (WorkIndex LogEntry)
@@ -246,16 +246,18 @@ createEvent ::
 createEvent p u l = withProjectAuth p u $ CreateEvent p u l
 
 amendEvent ::
-  (MonadDB m) => UserId -> EventId -> EventAmendment -> m AmendmentId
+  (MonadDB m) => UserId -> EventId -> EventAmendment -> m (EventId, AmendmentId)
 amendEvent uid eid a = do
-  ev <- findEvent eid
-  let act = AmendEvent eid a
-      forbidden = raiseOpForbidden uid UserNotEventLogger act
-      missing = raiseSubjectNotFound act
-  maybe
-    missing
-    (\(_, uid', _) -> if uid' == uid then liftdb act else forbidden)
-    ev
+  evMay <- findEvent eid
+  maybe missing saveAmendment evMay
+  where
+    act ev = AmendEvent eid ev a
+    forbidden ev = raiseOpForbidden uid UserNotEventLogger (act ev)
+    missing = raiseSubjectNotFound (FindEvent eid)
+    saveAmendment ev@(_, uid', _) =
+      if uid' == uid
+        then liftdb (act ev)
+        else forbidden ev
 
 findEvent :: (MonadDB m) => EventId -> m (Maybe KeyedLogEntry)
 findEvent = liftdb . FindEvent

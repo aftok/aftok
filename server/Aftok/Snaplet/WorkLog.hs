@@ -16,7 +16,7 @@ import Aftok.Types
 import Aftok.Util (fromMaybeT)
 import Control.Lens ((^.))
 import Control.Monad.Trans.Maybe (mapMaybeT)
-import Data.Aeson ((.=))
+import Data.Aeson ((.=), Value, object)
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import qualified Data.Text as T
@@ -79,7 +79,14 @@ payoutsHandler = do
   ptime <- liftIO $ C.getCurrentTime
   pure $ payouts (toDepF $ project ^. depf) ptime widx
 
-amendEventHandler :: S.Handler App App AmendmentId
+amendEventResultJSON :: (EventId, AmendmentId) -> Value
+amendEventResultJSON (eid, aid) =
+  object
+    [ "replacement_event" .= eventIdJSON eid,
+      "amendment_id" .= amendmentIdJSON aid
+    ]
+
+amendEventHandler :: S.Handler App App (EventId, AmendmentId)
 amendEventHandler = do
   uid <- requireUserId
   eventIdBytes <- getParam "eventId"

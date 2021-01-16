@@ -34,8 +34,10 @@ import Aftok.Database.PostgreSQL.Types
     creditToName,
     creditToParser,
     idParser,
+    pexec,
     pinsert,
     pquery,
+    ptransact,
     utcParser,
   )
 import Aftok.Interval
@@ -46,7 +48,7 @@ import Aftok.Json
 import Aftok.Payments.Types
 import Aftok.TimeLog
 import Aftok.Types
-import Control.Lens ((^.), _Just, preview)
+import Control.Lens ((^.), _Just, preview, set)
 import Control.Monad.Trans.Except (throwE)
 import Data.Aeson
   ( Value,
@@ -179,8 +181,11 @@ findEvent (EventId eid) = do
       keyedLogEntryParser
       [sql| SELECT project_id, user_id,
                  credit_to_type, credit_to_account, credit_to_user_id, credit_to_project_id,
-                 event_type, event_time, event_metadata FROM work_events
-          WHERE id = ? |]
+                 event_type, event_time, event_metadata
+            FROM work_events
+            WHERE id = ?
+            AND replacement_id IS NULL
+            |]
       (Only eid)
 
 findEvents :: ProjectId -> UserId -> RangeQuery -> Limit -> DBM [(EventId, LogEntry)]
@@ -195,6 +200,7 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
                    event_metadata
             FROM work_events
             WHERE project_id = ? AND user_id = ? AND event_time <= ?
+            AND replacement_id IS NULL
             ORDER BY event_time DESC
             LIMIT ?
             |]
@@ -207,6 +213,7 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
                    event_type, event_time, event_metadata
             FROM work_events
             WHERE project_id = ? AND user_id = ?
+            AND replacement_id IS NULL
             AND event_time >= ? AND event_time <= ?
             ORDER BY event_time DESC
             LIMIT ?
@@ -220,6 +227,7 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
                    event_type, event_time, event_metadata
             FROM work_events
             WHERE project_id = ? AND user_id = ? AND event_time >= ?
+            AND replacement_id IS NULL
             ORDER BY event_time DESC
             LIMIT ?
             |]
@@ -232,48 +240,70 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
                    event_type, event_time, event_metadata
             FROM work_events
             WHERE project_id = ? AND user_id = ?
+            AND replacement_id IS NULL
             ORDER BY event_time DESC
             LIMIT ?
             |]
         (pid, uid, limit)
 
-amendEvent :: EventId -> EventAmendment -> DBM AmendmentId
-amendEvent (EventId eid) = \case
-  (TimeChange mt t) ->
-    pinsert
-      AmendmentId
-      [sql| INSERT INTO event_time_amendments
-              (event_id, amended_at, event_time)
-              VALUES (?, ?, ?) RETURNING id |]
-      (eid, fromThyme $ mt ^. _ModTime, fromThyme t)
-  (CreditToChange mt c@(CreditToAccount acctId)) ->
-    pinsert
-      AmendmentId
-      [sql| INSERT INTO event_credit_to_amendments
-            (event_id, amended_at, credit_to_type, credit_to_account)
-            VALUES (?, ?, ?, ?) RETURNING id |]
-      (eid, fromThyme $ mt ^. _ModTime, creditToName c, acctId ^. _AccountId)
-  (CreditToChange mt c@(CreditToProject pid)) ->
-    pinsert
-      AmendmentId
-      [sql| INSERT INTO event_credit_to_amendments
-              (event_id, amended_at, credit_to_type, credit_to_project_id)
-              VALUES (?, ?, ?, ?) RETURNING id |]
-      (eid, fromThyme $ mt ^. _ModTime, creditToName c, pid ^. _ProjectId)
-  (CreditToChange mt c@(CreditToUser uid)) ->
-    pinsert
-      AmendmentId
-      [sql| INSERT INTO event_credit_to_amendments
-              (event_id, amended_at, credit_to_type, credit_to_user_id)
-              VALUES (?, ?, ?, ?) RETURNING id |]
-      (eid, fromThyme $ mt ^. _ModTime, creditToName c, uid ^. _UserId)
-  (MetadataChange mt v) ->
-    pinsert
-      AmendmentId
-      [sql| INSERT INTO event_metadata_amendments
-              (event_id, amended_at, event_metadata)
-              VALUES (?, ?, ?) RETURNING id |]
-      (eid, fromThyme $ mt ^. _ModTime, v)
+amendEvent :: EventId -> KeyedLogEntry -> EventAmendment -> DBM (EventId, AmendmentId)
+amendEvent (EventId eid) (pid, uid, ev) amendment = ptransact $ do
+  (amendId, replacement, amend_t :: Text) <- amend
+  newEventId <- createEvent pid uid replacement
+  void $
+    pexec
+      [sql| UPDATE work_events
+          SET replacement_id = ?, amended_by_id = ?, amended_by_type = ?
+          WHERE id = ? |]
+      (newEventId ^. _EventId, amendId ^. _AmendmentId, amend_t, eid)
+  pure (newEventId, amendId)
+  where
+    amend = case amendment of
+      (TimeChange mt t) -> do
+        aid <-
+          pinsert
+            AmendmentId
+            [sql| INSERT INTO event_time_amendments
+                  (work_event_id, amended_at, event_time)
+                  VALUES (?, ?, ?) RETURNING id |]
+            (eid, fromThyme $ mt ^. _ModTime, fromThyme t)
+        pure (aid, set (event . eventTime) t ev, "amend_event_time")
+      (CreditToChange mt c@(CreditToAccount acctId)) -> do
+        aid <-
+          pinsert
+            AmendmentId
+            [sql| INSERT INTO event_credit_to_amendments
+                  (work_event_id, amended_at, credit_to_type, credit_to_account)
+                  VALUES (?, ?, ?, ?) RETURNING id |]
+            (eid, fromThyme $ mt ^. _ModTime, creditToName c, acctId ^. _AccountId)
+        pure (aid, set creditTo c ev, "amend_credit_to")
+      (CreditToChange mt c@(CreditToProject cpid)) -> do
+        aid <-
+          pinsert
+            AmendmentId
+            [sql| INSERT INTO event_credit_to_amendments
+                  (work_event_id, amended_at, credit_to_type, credit_to_project_id)
+                  VALUES (?, ?, ?, ?) RETURNING id |]
+            (eid, fromThyme $ mt ^. _ModTime, creditToName c, cpid ^. _ProjectId)
+        pure (aid, set creditTo c ev, "amend_credit_to")
+      (CreditToChange mt c@(CreditToUser cuid)) -> do
+        aid <-
+          pinsert
+            AmendmentId
+            [sql| INSERT INTO event_credit_to_amendments
+                  (work_event_id, amended_at, credit_to_type, credit_to_user_id)
+                  VALUES (?, ?, ?, ?) RETURNING id |]
+            (eid, fromThyme $ mt ^. _ModTime, creditToName c, cuid ^. _UserId)
+        pure (aid, set creditTo c ev, "amend_credit_to")
+      (MetadataChange mt v) -> do
+        aid <-
+          pinsert
+            AmendmentId
+            [sql| INSERT INTO event_metadata_amendments
+                  (work_event_id, amended_at, event_metadata)
+                  VALUES (?, ?, ?) RETURNING id |]
+            (eid, fromThyme $ mt ^. _ModTime, v)
+        pure (aid, set eventMeta (Just v) ev, "amend_metadata")
 
 readWorkIndex :: ProjectId -> DBM (WorkIndex LogEntry)
 readWorkIndex (ProjectId pid) = do

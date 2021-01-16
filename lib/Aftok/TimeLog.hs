@@ -197,7 +197,6 @@ appendLogEntry idx logEvent =
       (StartWork t, StartWork t') -> Left $ if t > t' then e else e' -- ignore redundant starts
       (StopWork t, StopWork t') -> Left $ if t <= t' then e else e' -- ignore redundant ends
       _ -> Left e'
-
     -- if the interval includes the timestamp of a start event, then allow the extension of the interval
     extension :: (Interval C.UTCTime) -> le -> Maybe le
     extension ival newEvent@(view event -> StartWork t)
