@@ -4,9 +4,7 @@
 
 module Aftok.TimeLog
   ( LogEntry (..),
-    creditTo,
-    event,
-    eventMeta,
+    HasLogEntry (..),
     CreditTo (..),
     _CreditToAccount,
     _CreditToUser,
@@ -101,7 +99,7 @@ instance Ord LogEntry where
     let ordElems e = (e ^. event, e ^. creditTo)
      in ordElems a `compare` ordElems b
 
-newtype EventId = EventId UUID deriving (Show, Eq)
+newtype EventId = EventId UUID deriving (Show, Eq, Ord)
 
 makePrisms ''EventId
 
@@ -114,7 +112,7 @@ data EventAmendment
   | CreditToChange !ModTime !CreditTo
   | MetadataChange !ModTime !A.Value
 
-newtype AmendmentId = AmendmentId UUID deriving (Show, Eq)
+newtype AmendmentId = AmendmentId UUID deriving (Show, Eq, Ord)
 
 makePrisms ''AmendmentId
 

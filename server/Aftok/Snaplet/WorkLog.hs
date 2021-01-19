@@ -1,3 +1,5 @@
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 
 module Aftok.Snaplet.WorkLog where
@@ -9,12 +11,27 @@ import Aftok.Snaplet
 import Aftok.Snaplet.Auth
 import Aftok.Snaplet.Util
 import Aftok.TimeLog
+  ( AmendmentId,
+    EventId(..),
+    FractionalPayouts,
+    HasLogEntry (..),
+    LogEntry,
+    LogEvent,
+    ModTime(..),
+    WorkIndex,
+    _EventId,
+    workIndex,
+    payouts,
+    toDepF,
+    eventTime,
+    eventMeta,
+  )
 import Aftok.Types
   ( _ProjectId,
     _UserId,
   )
 import Aftok.Util (fromMaybeT)
-import Control.Lens ((^.))
+import Control.Lens (Lens', (^.), makePrisms, _2)
 import Control.Monad.Trans.Maybe (mapMaybeT)
 import Data.Aeson ((.=), Value, object)
 import qualified Data.Aeson as A
@@ -64,8 +81,26 @@ userEvents = do
   limit <- Limit . fromMaybe 1 <$> decimalParam "limit"
   snapEval $ findEvents pid uid ival limit
 
-userWorkIndex :: S.Handler App App (WorkIndex LogEntry)
-userWorkIndex = workIndex . fmap snd <$> userEvents
+newtype UserEvent = UserEvent (EventId, LogEntry)
+  deriving (Eq, Ord)
+
+makePrisms ''UserEvent
+
+instance HasLogEntry UserEvent where
+  logEntry :: Lens' UserEvent LogEntry
+  logEntry = _UserEvent . _2 . logEntry
+
+userEventJSON :: UserEvent -> Value
+userEventJSON (UserEvent (eid, le)) =
+  object [
+    "event_id" .= eventIdJSON eid,
+    "eventTime" .= (le ^. event . eventTime),
+    "eventMeta" .= (le ^. eventMeta)
+    ]
+
+
+userWorkIndex :: S.Handler App App (WorkIndex UserEvent)
+userWorkIndex = workIndex . fmap UserEvent <$> userEvents
 
 payoutsHandler :: S.Handler App App FractionalPayouts
 payoutsHandler = do

@@ -195,55 +195,55 @@ findEvents (ProjectId pid) (UserId uid) rquery (Limit limit) = do
       pquery
         ((,) <$> idParser EventId <*> logEntryParser)
         [sql| SELECT id, credit_to_type,
-                   credit_to_account, credit_to_user_id, credit_to_project_id,
-                   event_type, event_time,
-                   event_metadata
-            FROM work_events
-            WHERE project_id = ? AND user_id = ? AND event_time <= ?
-            AND replacement_id IS NULL
-            ORDER BY event_time DESC
-            LIMIT ?
-            |]
+                     credit_to_account, credit_to_user_id, credit_to_project_id,
+                     event_type, event_time,
+                     event_metadata
+              FROM work_events
+              WHERE project_id = ? AND user_id = ? AND event_time <= ?
+              AND replacement_id IS NULL
+              ORDER BY event_time DESC
+              LIMIT ?
+              |]
         (pid, uid, fromThyme e, limit)
     (During s e) ->
       pquery
         ((,) <$> idParser EventId <*> logEntryParser)
         [sql| SELECT id, credit_to_type,
-                   credit_to_account, credit_to_user_id, credit_to_project_id,
-                   event_type, event_time, event_metadata
-            FROM work_events
-            WHERE project_id = ? AND user_id = ?
-            AND replacement_id IS NULL
-            AND event_time >= ? AND event_time <= ?
-            ORDER BY event_time DESC
-            LIMIT ?
-            |]
+                     credit_to_account, credit_to_user_id, credit_to_project_id,
+                     event_type, event_time, event_metadata
+              FROM work_events
+              WHERE project_id = ? AND user_id = ?
+              AND replacement_id IS NULL
+              AND event_time >= ? AND event_time <= ?
+              ORDER BY event_time DESC
+              LIMIT ?
+              |]
         (pid, uid, fromThyme s, fromThyme e, limit)
     (After s) ->
       pquery
         ((,) <$> idParser EventId <*> logEntryParser)
         [sql| SELECT id, credit_to_type,
-                   credit_to_account, credit_to_user_id, credit_to_project_id,
-                   event_type, event_time, event_metadata
-            FROM work_events
-            WHERE project_id = ? AND user_id = ? AND event_time >= ?
-            AND replacement_id IS NULL
-            ORDER BY event_time DESC
-            LIMIT ?
-            |]
+                     credit_to_account, credit_to_user_id, credit_to_project_id,
+                     event_type, event_time, event_metadata
+              FROM work_events
+              WHERE project_id = ? AND user_id = ? AND event_time >= ?
+              AND replacement_id IS NULL
+              ORDER BY event_time DESC
+              LIMIT ?
+              |]
         (pid, uid, fromThyme s, limit)
     (Always) ->
       pquery
         ((,) <$> idParser EventId <*> logEntryParser)
         [sql| SELECT id, credit_to_type,
-                   credit_to_account, credit_to_user_id, credit_to_project_id,
-                   event_type, event_time, event_metadata
-            FROM work_events
-            WHERE project_id = ? AND user_id = ?
-            AND replacement_id IS NULL
-            ORDER BY event_time DESC
-            LIMIT ?
-            |]
+                     credit_to_account, credit_to_user_id, credit_to_project_id,
+                     event_type, event_time, event_metadata
+              FROM work_events
+              WHERE project_id = ? AND user_id = ?
+              AND replacement_id IS NULL
+              ORDER BY event_time DESC
+              LIMIT ?
+              |]
         (pid, uid, limit)
 
 amendEvent :: EventId -> KeyedLogEntry -> EventAmendment -> DBM (EventId, AmendmentId)
