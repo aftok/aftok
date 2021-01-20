@@ -14,10 +14,6 @@ import Aftok.Currency (Amount (..), Currency (..))
 import Aftok.Currency.Bitcoin
 import Aftok.Currency.Zcash (_Zatoshi)
 import Aftok.Interval
-import Aftok.Payments.Types
-  ( PaymentId,
-    _PaymentId,
-  )
 import qualified Aftok.Project as P
 import Aftok.TimeLog
 import Aftok.Types
@@ -129,15 +125,9 @@ obj = O.fromList
 idValue :: forall a. Getter a UUID -> a -> Value
 idValue l a = toJSON . U.toText $ view l a
 
-idJSON :: forall a. Text -> Getter a UUID -> a -> Value
-idJSON t l a = v1 $ obj [t .= idValue l a]
-
 qdbJSON :: Text -> Getter a UUID -> Getter a Value -> a -> Value
 qdbJSON name _id _value x =
   v1 $ obj [(name <> "Id") .= idValue _id x, name .= (x ^. _value)]
-
-projectIdJSON :: ProjectId -> Value
-projectIdJSON = idJSON "projectId" _ProjectId
 
 projectJSON :: P.Project -> Value
 projectJSON p =
@@ -150,9 +140,6 @@ projectJSON p =
 
 qdbProjectJSON :: (ProjectId, P.Project) -> Value
 qdbProjectJSON = qdbJSON "project" (_1 . _ProjectId) (_2 . L.to projectJSON)
-
-auctionIdJSON :: A.AuctionId -> Value
-auctionIdJSON = idJSON "auctionId" A._AuctionId
 
 auctionJSON :: A.Auction Amount -> Value
 auctionJSON x =
@@ -180,7 +167,7 @@ creditToJSON (CreditToAccount accountId) =
 creditToJSON (CreditToUser uid) =
   v2 $ obj ["creditToUser" .= idValue _UserId uid]
 creditToJSON (CreditToProject pid) =
-  v2 $ obj ["creditToProject" .= projectIdJSON pid]
+  v2 $ obj ["creditToProject" .= idValue _ProjectId pid]
 
 parseCreditTo :: Value -> Parser CreditTo
 parseCreditTo = unversion "CreditTo" $ \case
@@ -252,9 +239,6 @@ workIndexJSON leJSON (WorkIndex widx) =
           "intervals" .= (intervalJSON leJSON <$> L.toList l)
         ]
 
-eventIdJSON :: EventId -> Value
-eventIdJSON = idJSON "eventId" _EventId
-
 logEventJSON' :: LogEvent -> Value
 logEventJSON' ev =
   object [eventName ev .= object ["eventTime" .= (ev ^. eventTime)]]
@@ -269,9 +253,6 @@ logEntryFields (LogEntry c ev m) =
     "eventMeta" .= m
   ]
 
-amendmentIdJSON :: AmendmentId -> Value
-amendmentIdJSON = idJSON "amendmentId" _AmendmentId
-
 amountJSON :: Amount -> Value
 amountJSON (Amount currency value) = case currency of
   BTC -> object ["satoshi" .= (value ^. _Satoshi)]
@@ -284,9 +265,6 @@ parseAmountJSON = \case
       MaybeT (fmap (Amount BTC . review _Satoshi) <$> o .:? "satoshi")
         <|> MaybeT (fmap (Amount ZEC . review _Zatoshi) <$> o .:? "zatoshi")
   val -> fail $ "Value " <> show val <> " is not a JSON object."
-
-billableIdJSON :: B.BillableId -> Value
-billableIdJSON = idJSON "billableId" B._BillableId
 
 billableJSON :: B.Billable Amount -> Value
 billableJSON = v1 . obj . billableKV
@@ -333,9 +311,6 @@ subscriptionKV sub =
     "end_time" .= view B.endTime sub
   ]
 
-subscriptionIdJSON :: B.SubscriptionId -> Value
-subscriptionIdJSON = idJSON "subscriptionId" B._SubscriptionId
-
 -- paymentRequestDetailsJSON :: [PaymentRequestDetail Amount] -> Value
 -- paymentRequestDetailsJSON r = v1 $ obj ["payment_requests" .= fmap paymentRequestDetailJSON r]
 --
@@ -346,9 +321,6 @@ subscriptionIdJSON = idJSON "subscriptionId" B._SubscriptionId
 --   , subscriptionKV $ view _3 r
 --   , billableKV $ view _4 r
 --   ]
-
-paymentIdJSON :: PaymentId -> Value
-paymentIdJSON = idJSON "paymentId" _PaymentId
 
 -------------
 -- Parsers --

@@ -19,6 +19,7 @@ import Aftok.TimeLog
     LogEvent,
     ModTime(..),
     WorkIndex,
+    _AmendmentId,
     _EventId,
     workIndex,
     payouts,
@@ -93,7 +94,7 @@ instance HasLogEntry UserEvent where
 userEventJSON :: UserEvent -> Value
 userEventJSON (UserEvent (eid, le)) =
   object [
-    "event_id" .= eventIdJSON eid,
+    "event_id" .= idValue _EventId eid,
     "eventTime" .= (le ^. event . eventTime),
     "eventMeta" .= (le ^. eventMeta)
     ]
@@ -117,8 +118,8 @@ payoutsHandler = do
 amendEventResultJSON :: (EventId, AmendmentId) -> Value
 amendEventResultJSON (eid, aid) =
   object
-    [ "replacement_event" .= eventIdJSON eid,
-      "amendment_id" .= amendmentIdJSON aid
+    [ "replacement_event" .= idValue _EventId eid,
+      "amendment_id" .= idValue _AmendmentId aid
     ]
 
 amendEventHandler :: S.Handler App App (EventId, AmendmentId)
