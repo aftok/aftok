@@ -17,7 +17,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Traversable (class Traversable, traverse)
 import Data.UUID as UUID
-import Type.Proxy (Proxy(..))
+-- import Type.Proxy (Proxy(..))
 -- import Text.Format as F -- (format, zeroFill, width)
 
 import Effect.Aff (Aff)
@@ -30,7 +30,8 @@ import Affjax.ResponseFormat as RF
 import Data.Argonaut.Encode (encodeJson)
 
 import Aftok.Project (ProjectId(..), pidStr)
-import Aftok.Types (APIError, JsonCompose, decompose, parseDatedResponse)
+-- import Aftok.Types (APIError, JsonCompose, decompose, parseDatedResponse)
+import Aftok.Types (APIError, decompose, parseDatedResponse)
 
 data TimelineError
   = LogFailure (APIError)
@@ -41,78 +42,103 @@ instance showTimelineError :: Show TimelineError where
     LogFailure e -> show e
     Unexpected t -> t
 
-data Event' i
-  = StartEvent i
-  | StopEvent i
+data Event i
+  = StartEvent { eventId :: String, eventTime :: i }
+  | StopEvent { eventId :: String, eventTime :: i }
 
-type Event = Event' Instant
+derive instance eventFunctor :: Functor Event
 
-derive instance eventFunctor :: Functor Event'
-
-instance eventFoldable :: Foldable Event' where
+instance eventFoldable :: Foldable Event where
   foldr f b = case _ of
-    StartEvent a -> f a b
-    StopEvent a -> f a b
+    StartEvent a -> f a.eventTime b
+    StopEvent a -> f a.eventTime b
   foldl f b = case _ of
-    StartEvent a -> f b a
-    StopEvent a -> f b a
+    StartEvent a -> f b a.eventTime
+    StopEvent a -> f b a.eventTime
   foldMap = foldMapDefaultR
 
-instance eventTraversable :: Traversable Event' where
+instance eventTraversable :: Traversable Event where
   traverse f = case _ of
-    StartEvent a -> StartEvent <$> f a 
-    StopEvent a -> StopEvent <$> f a 
+    StartEvent a -> StartEvent <<< a { eventTime = _ } <$> f a.eventTime
+    StopEvent a  -> StopEvent <<<  a { eventTime = _ } <$> f a.eventTime
   sequence = traverse identity
 
-instance decodeJsonEvent :: DecodeJson (Event' String) where
+instance decodeJsonEvent :: DecodeJson (Event String) where
   decodeJson json = do
     obj <- decodeJson json
+    eventId <- obj .: "event"
     event <- obj .: "event"
     start' <- traverse (_ .: "eventTime") =<< event .:? "start"
     stop' <-  traverse (_ .: "eventTime") =<< event .:? "stop"
-    note "Only 'stop' and 'start' events are supported." $ (StartEvent <$> start') <|> (StopEvent <$> stop')
+    note "Only 'stop' and 'start' events are supported." $ 
+      (StartEvent <<< { eventId: eventId, eventTime: _ } <$> start') <|> 
+      (StopEvent  <<< { eventId: eventId, eventTime: _ } <$> stop')
 
-newtype Interval' i = Interval
+newtype Interval i = Interval
   { start :: i
   , end :: i
   }
 
-derive instance intervalEq :: (Eq i) => Eq (Interval' i)
-derive instance intervalNewtype :: Newtype (Interval' i) _
+derive instance intervalEq :: (Eq i) => Eq (Interval i)
+derive instance intervalNewtype :: Newtype (Interval i) _
 
-instance showInterval :: Show i => Show (Interval' i) where
+instance showInterval :: Show i => Show (Interval i) where
   show (Interval i) = "Interval {start: " <> show i.start <> ", end: " <> show i.end <> "}"
 
-type Interval = Interval' Instant
+type TimeInterval = Interval Instant
 
-derive instance intervalFunctor :: Functor Interval'
+derive instance intervalFunctor :: Functor Interval
 
-instance intervalFoldable :: Foldable Interval' where
+instance intervalFoldable :: Foldable Interval where
   foldr f b (Interval i) = f i.start (f i.end b) 
   foldl f b (Interval i) = f (f b i.start) i.end 
   foldMap = foldMapDefaultR
 
-instance intervalTraversable :: Traversable Interval' where
+instance intervalTraversable :: Traversable Interval where
   traverse f (Interval i) = interval <$> f i.start <*> f i.end 
   sequence = traverse identity
 
-instance decodeJsonInterval :: DecodeJson (Interval' String) where
+instance intervalDecodeJSON :: DecodeJson i => DecodeJson (Interval i) where
   decodeJson json = do
     obj <- decodeJson json
     interval <$> obj .: "start" <*> obj .: "end"
 
-interval :: forall i. i -> i -> Interval' i
+interval :: forall i. i -> i -> Interval i
 interval s e = Interval { start: s, end: e }
 
-start :: forall i. Interval' i -> i
+start :: forall i. Interval i -> i
 start (Interval i) = i.start
 
-end :: forall i. Interval' i -> i
+end :: forall i. Interval i -> i
 end (Interval i) = i.end
+
+newtype IntervalEvent i = IntervalEvent
+  { eventId :: String
+  , eventTime :: i
+  }
+
+intervalEvent :: forall i. String -> i -> IntervalEvent i
+intervalEvent eid i = IntervalEvent { eventId: eid, eventTime: i }
+
+derive instance intervalEventFunctor :: Functor IntervalEvent
+
+instance intervalEventFoldable :: Foldable IntervalEvent where
+  foldr f b (IntervalEvent i) = f i.eventTime b
+  foldl f b (IntervalEvent i) = f b i.eventTime 
+  foldMap = foldMapDefaultR
+
+instance intervalEventTraversable :: Traversable IntervalEvent where
+  traverse f (IntervalEvent i) = (\t -> IntervalEvent { eventId: i.eventId, eventTime: t }) <$> f i.eventTime
+  sequence = traverse identity
+
+instance intervalEventDecodeJson :: DecodeJson (IntervalEvent String) where
+  decodeJson json = do
+    obj <- decodeJson json
+    intervalEvent <$> obj .: "eventId" <*> obj .: "eventTime"
 
 data TimeSpan' t
   = Before t
-  | During (Interval' t)
+  | During (Interval t)
   | After t
 
 type TimeSpan = TimeSpan' DateTime
@@ -136,17 +162,17 @@ instance timeSpanTraversable :: Traversable TimeSpan' where
     After  a -> After <$> f a
   sequence = traverse identity
 
-apiLogStart :: ProjectId -> Aff (Either TimelineError Instant)
+apiLogStart :: ProjectId -> Aff (Either TimelineError (IntervalEvent Instant))
 apiLogStart (ProjectId pid) = do
   let requestBody = Just <<< RB.Json <<< encodeJson $ { schemaVersion: "2.0" }
   response <- post RF.json ("/api/user/projects/" <> UUID.toString pid <> "/logStart") requestBody
   liftEffect <<< runExceptT $ do
     event <- withExceptT LogFailure $ parseDatedResponse response
     case event of 
-      StartEvent t -> pure t
-      StopEvent  _ -> throwError <<< Unexpected $ "Expected start event, got stop."
+      StartEvent ev -> pure $ IntervalEvent ev
+      StopEvent _   -> throwError <<< Unexpected $ "Expected start event, got stop."
 
-apiLogEnd :: ProjectId -> Aff (Either TimelineError Instant)
+apiLogEnd :: ProjectId -> Aff (Either TimelineError (IntervalEvent Instant))
 apiLogEnd (ProjectId pid) = do
   let requestBody = Just <<< RB.Json <<< encodeJson $ { schemaVersion: "2.0" }
   response <- post RF.json ("/api/user/projects/" <> UUID.toString pid <> "/logEnd") requestBody
@@ -154,7 +180,7 @@ apiLogEnd (ProjectId pid) = do
     event <- withExceptT LogFailure $ parseDatedResponse response
     case event of
       StartEvent _ -> throwError <<< Unexpected $ "Expected stop event, got start."
-      StopEvent  t -> pure t
+      StopEvent ev -> pure $ IntervalEvent ev
 
 newtype ListIntervalsResponse a = ListIntervalsResponse
   { workIndex :: Array ({ intervals :: Array a }) 
@@ -177,10 +203,10 @@ instance listIntervalsResponseTraversable :: Traversable ListIntervalsResponse w
 instance listIntervalsResponseDecodeJson :: DecodeJson a => DecodeJson (ListIntervalsResponse a) where
   decodeJson = map ListIntervalsResponse <<< decodeJson
 
-_ListIntervalsResponse :: Proxy (JsonCompose ListIntervalsResponse Interval' String)
-_ListIntervalsResponse = Proxy
+-- _ListIntervalsResponse :: Proxy (JsonCompose ListIntervalsResponse (JsonCompose Interval IntervalEvent) String)
+-- _ListIntervalsResponse = Proxy
 
-apiListIntervals :: ProjectId -> TimeSpan -> Aff (Either TimelineError (Array Interval))
+apiListIntervals :: ProjectId -> TimeSpan -> Aff (Either TimelineError (Array (Interval (IntervalEvent Instant))))
 apiListIntervals pid ts = do
   ts' <- liftEffect $ traverse (JD.toISOString <<< JD.fromDateTime) ts
   let queryElements = case ts' of
@@ -191,11 +217,12 @@ apiListIntervals pid ts = do
   liftEffect 
     <<< runExceptT 
     <<< map (\(ListIntervalsResponse r) -> r.workIndex >>= (_.intervals))
-    <<< map decompose
+    <<< map (map decompose <<< decompose)
     <<< withExceptT LogFailure 
-      $ parseDatedResponse response
+      $ parseDatedResponse response 
 
-apiLatestEvent :: ProjectId -> Aff (Either TimelineError (Maybe Event))
+
+apiLatestEvent :: ProjectId -> Aff (Either TimelineError (Maybe (Event Instant)))
 apiLatestEvent pid = do
   response <- get RF.json ("/api/user/projects/" <> pidStr pid <> "/events")
   liftEffect 
