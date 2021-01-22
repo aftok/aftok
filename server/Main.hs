@@ -4,12 +4,11 @@ module Main where
 
 import Aftok.Auction (_AuctionId)
 import Aftok.Billing (_BillableId, _SubscriptionId)
-import Aftok.Types (_ProjectId)
-import Aftok.Payments.Types (_PaymentId)
 import qualified Aftok.Config as C
 import Aftok.Currency.Bitcoin.Payments (_bip70Request)
 import Aftok.Currency.Zcash (rpcValidateZAddr)
 import Aftok.Json
+import Aftok.Payments.Types (_PaymentId)
 import Aftok.QConfig as Q
 import Aftok.Snaplet
 import Aftok.Snaplet.Auctions
@@ -21,6 +20,7 @@ import Aftok.Snaplet.Projects
 import Aftok.Snaplet.Users
 import Aftok.Snaplet.WorkLog
 import Aftok.TimeLog
+import Aftok.Types (_ProjectId)
 import Control.Exception (try)
 import Control.Lens
   ( (^.),

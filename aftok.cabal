@@ -206,6 +206,7 @@ Executable aftok-server
     , text
     , thyme
     , transformers
+    , unordered-containers
     , uuid                
     , wreq        
     , x509

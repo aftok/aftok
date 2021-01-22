@@ -1,10 +1,15 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Aftok.Snaplet.WorkLog where
 
 import Aftok.Database
+import Aftok.Interval
+  ( Interval (..),
+    intervalJSON,
+  )
 import Aftok.Json
 import Aftok.Project
 import Aftok.Snaplet
@@ -12,31 +17,35 @@ import Aftok.Snaplet.Auth
 import Aftok.Snaplet.Util
 import Aftok.TimeLog
   ( AmendmentId,
-    EventId(..),
+    EventAmendment (..),
+    EventId (..),
     FractionalPayouts,
     HasLogEntry (..),
     LogEntry,
     LogEvent,
-    ModTime(..),
-    WorkIndex,
+    ModTime (..),
+    Payouts (..),
+    WorkIndex (..),
     _AmendmentId,
     _EventId,
-    workIndex,
+    eventMeta,
+    eventTime,
     payouts,
     toDepF,
-    eventTime,
-    eventMeta,
+    workIndex,
   )
 import Aftok.Types
-  ( _ProjectId,
+  ( CreditTo (..),
+    _ProjectId,
     _UserId,
   )
 import Aftok.Util (fromMaybeT)
-import Control.Lens (Lens', (^.), makePrisms, _2)
+import Control.Lens (Lens', (^.), _2, makePrisms)
 import Control.Monad.Trans.Maybe (mapMaybeT)
-import Data.Aeson ((.=), Value, object)
-import qualified Data.Aeson as A
-import qualified Data.Aeson.Types as A
+import Data.Aeson ((.:), (.=), Value (Object), eitherDecode, object)
+import Data.Aeson.Types (Parser, parseEither)
+import qualified Data.List.NonEmpty as L
+import qualified Data.Map.Strict as MS
 import qualified Data.Text as T
 import Data.Thyme.Clock as C
 import Data.UUID as U
@@ -51,7 +60,7 @@ logWorkHandler evCtr = do
   pid <- requireProjectId
   requestBody <- readRequestBody 4096
   timestamp <- liftIO C.getCurrentTime
-  case (A.eitherDecode requestBody >>= A.parseEither (parseLogEntry uid evCtr)) of
+  case (eitherDecode requestBody >>= parseEither (parseLogEntry uid evCtr)) of
     Left err ->
       snapError 400 $
         "Unable to parse log entry "
@@ -93,12 +102,11 @@ instance HasLogEntry UserEvent where
 
 userEventJSON :: UserEvent -> Value
 userEventJSON (UserEvent (eid, le)) =
-  object [
-    "event_id" .= idValue _EventId eid,
-    "eventTime" .= (le ^. event . eventTime),
-    "eventMeta" .= (le ^. eventMeta)
+  object
+    [ "eventId" .= idValue _EventId eid,
+      "eventTime" .= (le ^. event . eventTime),
+      "eventMeta" .= (le ^. eventMeta)
     ]
-
 
 userWorkIndex :: S.Handler App App (WorkIndex UserEvent)
 userWorkIndex = workIndex . fmap UserEvent <$> userEvents
@@ -136,14 +144,50 @@ amendEventHandler = do
   either
     (snapError 400 . T.pack)
     (snapEval . amendEvent uid eventId)
-    (A.parseEither (parseEventAmendment modTime) requestJSON)
+    (parseEither (parseEventAmendment modTime) requestJSON)
 
-keyedLogEntryJSON :: (EventId, KeyedLogEntry) -> A.Value
+keyedLogEntryJSON :: (EventId, KeyedLogEntry) -> Value
 keyedLogEntryJSON (eid, (pid, uid, ev)) =
-  v2
+  v1
     . obj
     $ [ "eventId" .= idValue _EventId eid,
         "projectId" .= idValue _ProjectId pid,
         "loggedBy" .= idValue _UserId uid
       ]
       <> logEntryFields ev
+
+payoutsJSON :: FractionalPayouts -> Value
+payoutsJSON (Payouts m) =
+  v1 $
+    let payoutsRec :: (CreditTo, Rational) -> Value
+        payoutsRec (c, r) =
+          object ["creditTo" .= creditToJSON c, "payoutRatio" .= r, "payoutPercentage" .= (fromRational @Double r * 100)]
+     in obj $ ["payouts" .= fmap payoutsRec (MS.assocs m)]
+
+workIndexJSON :: forall t. (t -> Value) -> WorkIndex t -> Value
+workIndexJSON leJSON (WorkIndex widx) =
+  v1 $
+    obj ["workIndex" .= fmap widxRec (MS.assocs widx)]
+  where
+    widxRec :: (CreditTo, NonEmpty (Interval t)) -> Value
+    widxRec (c, l) =
+      object
+        [ "creditTo" .= creditToJSON c,
+          "intervals" .= (intervalJSON leJSON <$> L.toList l)
+        ]
+
+parseEventAmendment ::
+  ModTime ->
+  Value ->
+  Parser EventAmendment
+parseEventAmendment t = \case
+  Object o ->
+    let parseA :: Text -> Parser EventAmendment
+        parseA "timeChange" = TimeChange t <$> o .: "eventTime"
+        parseA "creditToChange" = CreditToChange t <$> parseCreditToV2 o
+        parseA "metadataChange" = MetadataChange t <$> o .: "eventMeta"
+        parseA tid =
+          fail . T.unpack $ "Amendment type " <> tid <> " not recognized."
+     in o .: "amendment" >>= parseA
+  val ->
+    fail $ "Value " <> show val <> " is not a JSON object."

@@ -14,6 +14,7 @@ module Aftok.Database.PostgreSQL.Events
   )
 where
 
+import qualified Aftok.Billing as B
 import Aftok.Database
   ( DBError (EventStorageFailed),
     DBOp
@@ -43,7 +44,9 @@ import Aftok.Database.PostgreSQL.Types
 import Aftok.Interval
 import Aftok.Json
   ( billableJSON,
-    createSubscriptionJSON,
+    idValue,
+    obj,
+    v1,
   )
 import Aftok.Payments.Types
 import Aftok.TimeLog
@@ -51,7 +54,8 @@ import Aftok.Types
 import Control.Lens ((^.), _Just, preview, set)
 import Control.Monad.Trans.Except (throwE)
 import Data.Aeson
-  ( Value,
+  ( (.=),
+    Value,
   )
 import Data.Thyme.Clock as C
 import Data.Thyme.Time
@@ -112,6 +116,15 @@ storeEvent' :: DBOp a -> DBM EventId
 storeEvent' = maybe (lift $ throwE EventStorageFailed) id . storeEvent
 
 type EventType = Text
+
+createSubscriptionJSON :: UserId -> B.BillableId -> Day -> Value
+createSubscriptionJSON uid bid d =
+  v1 $
+    obj
+      [ "user_id" .= idValue _UserId uid,
+        "billable_id" .= idValue B._BillableId bid,
+        "start_date" .= showGregorian d
+      ]
 
 storeEventJSON :: Maybe UserId -> EventType -> Value -> DBM EventId
 storeEventJSON uid etype v = do
