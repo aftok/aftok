@@ -67,6 +67,7 @@ data TipOutput = TipOutput
 data TipRequestResult
   = TipOk Text Word64 [TipOutput] Int
   | TipTooSmall Word64
+  | TipNoRecipients
 
 instance ToJSON TipRequestResult where
   toJSON (TipOk uri total outs elided) =
@@ -86,6 +87,8 @@ instance ToJSON TipRequestResult where
       [ "error" A..= ("amount_too_small" :: Text),
         "minViableZatoshi" A..= v
       ]
+  toJSON TipNoRecipients =
+    A.object ["error" A..= ("no_recipients" :: Text)]
 
 -- | Public tip-jar API: a roster GET and a build-a-payment POST.
 type TipJarAPI =

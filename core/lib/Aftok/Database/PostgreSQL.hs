@@ -102,7 +102,10 @@ pgEval =
     (SetUserZcashAddress uid addr) -> Q.setUserZcashAddress uid addr
     (FindUserZcashAddress uid) -> Q.findUserZcashAddress uid
     (SetUserZcashIVK uid ivk) -> Q.setUserZcashIVK uid ivk
+    (FindUserZcashIVK uid) -> Q.findUserZcashIVK uid
     -- Tip-jar settings operations
     (SetProjectTipSettings pid settings) -> Q.setProjectTipSettings pid settings
     (SetContributorTipSettings pid uid settings) -> Q.setContributorTipSettings pid uid settings
+    (FindProjectTipSettings pid) -> Q.findProjectTipSettings pid
+    (FindContributorTipSettings pid uid) -> Q.findContributorTipSettings pid uid
     (RaiseDBError err _) -> lift . throwE $ err

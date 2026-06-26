@@ -48,6 +48,11 @@ import Aftok.Servant.Session
     protectedSessionServer,
     sessionServer,
   )
+import Aftok.Servant.TipJar
+  ( TipJarAPI,
+    tipJarInfoHandler,
+    tipRequestHandler,
+  )
 import Aftok.Servant.Users
   ( CaptchaConfig,
     ProtectedUsersAPI,
@@ -134,13 +139,18 @@ apiServer ::
   RegisterOps IO ->
   CaptchaConfig ->
   PasswordResetOps IO ->
-  ServerT (UsersAPI :<|> SessionAPI :<|> PasswordResetAPI :<|> ConfigAPI :<|> AftokAuth :> ProtectedAPI) AppM
+  ServerT (UsersAPI :<|> SessionAPI :<|> PasswordResetAPI :<|> ConfigAPI :<|> TipJarAPI :<|> AftokAuth :> ProtectedAPI) AppM
 apiServer btcCfg payCfg regOps captchaCfg pwResetOps =
   usersServer regOps captchaCfg
     :<|> sessionServer
     :<|> passwordResetServer pwResetOps
     :<|> configServer captchaCfg
+    :<|> tipJarServer
     :<|> protectedServer btcCfg payCfg regOps
+
+-- | Public tip-jar server (gated by tip_jar_enabled, no authentication)
+tipJarServer :: ServerT TipJarAPI AppM
+tipJarServer = tipJarInfoHandler :<|> tipRequestHandler
 
 -- | Protected server (requires authentication)
 protectedServer ::

@@ -20,6 +20,7 @@ module Aftok.API
     module Aftok.API.Payments,
     module Aftok.API.PasswordReset,
     module Aftok.API.Config,
+    module Aftok.API.TipJar,
 
     -- * Auth Types
     module Aftok.API.Auth,
@@ -37,6 +38,7 @@ import Aftok.API.PasswordReset
 import Aftok.API.Payments
 import Aftok.API.Projects
 import Aftok.API.Session
+import Aftok.API.TipJar
 import Aftok.API.Types ()
 import Aftok.API.Users
 import Aftok.API.WorkLog
@@ -57,6 +59,8 @@ type VersionedAPI =
     :<|> PasswordResetAPI
     -- Client configuration endpoint (public)
     :<|> ConfigAPI
+    -- Public tip-jar endpoints (gated by tip_jar_enabled, no auth)
+    :<|> TipJarAPI
     -- Protected endpoints (auth required)
     :<|> AftokAuth :> ProtectedAPI
 

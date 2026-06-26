@@ -125,9 +125,12 @@ data DBOp a where
   SetUserZcashAddress :: UserId -> Zcash.Address -> DBOp ()
   FindUserZcashAddress :: UserId -> DBOp (Maybe Zcash.Address)
   SetUserZcashIVK :: UserId -> Zcash.IVK -> DBOp ()
+  FindUserZcashIVK :: UserId -> DBOp (Maybe Zcash.IVK)
   -- Tip-jar settings operations
   SetProjectTipSettings :: ProjectId -> ProjectTipSettings -> DBOp ()
   SetContributorTipSettings :: ProjectId -> UserId -> ContributorTipSettings -> DBOp ()
+  FindProjectTipSettings :: ProjectId -> DBOp (Maybe ProjectTipSettings)
+  FindContributorTipSettings :: ProjectId -> UserId -> DBOp (Maybe ContributorTipSettings)
   RaiseDBError :: forall x y. DBError -> DBOp x -> DBOp y
 
 data InvitationError
@@ -210,6 +213,11 @@ findUserZcashAddress = MaybeT . liftdb . FindUserZcashAddress
 setUserZcashIVK :: (MonadDB m) => UserId -> Zcash.IVK -> m ()
 setUserZcashIVK uid ivk = liftdb $ SetUserZcashIVK uid ivk
 
+-- | Performs NO authorization. Intended for the public tip-jar path, which is
+-- gated by the project's @tip_jar_enabled@ flag rather than by a user.
+findUserZcashIVK :: (MonadDB m) => UserId -> m (Maybe Zcash.IVK)
+findUserZcashIVK = liftdb . FindUserZcashIVK
+
 -- Password reset ops
 
 createPasswordResetToken :: (MonadDB m) => UserId -> Text -> C.UTCTime -> m PasswordResetTokenId
@@ -279,6 +287,16 @@ setProjectTipSettings pid settings = liftdb $ SetProjectTipSettings pid settings
 -- contributor settings require a membership check.
 setContributorTipSettings :: (MonadDB m) => ProjectId -> UserId -> ContributorTipSettings -> m ()
 setContributorTipSettings pid uid settings = liftdb $ SetContributorTipSettings pid uid settings
+
+-- | Performs NO authorization. Intended for the public tip-jar path, which is
+-- gated by the project's @tip_jar_enabled@ flag rather than by a user.
+findProjectTipSettings :: (MonadDB m) => ProjectId -> m (Maybe ProjectTipSettings)
+findProjectTipSettings = liftdb . FindProjectTipSettings
+
+-- | Performs NO authorization. Intended for the public tip-jar path, which is
+-- gated by the project's @tip_jar_enabled@ flag rather than by a user.
+findContributorTipSettings :: (MonadDB m) => ProjectId -> UserId -> m (Maybe ContributorTipSettings)
+findContributorTipSettings pid uid = liftdb $ FindContributorTipSettings pid uid
 
 addUserToProject ::
   (MonadDB m) => ProjectId -> InvitingUID -> InvitedUID -> m ()
