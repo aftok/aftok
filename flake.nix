@@ -23,7 +23,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     lrzhs = {
-      url = "github:nuttycom/lrzhs/51838a296afc0f0b8c8ec7cf0018dc12f989ecc5";
+      url = "github:nuttycom/lrzhs/110f221ca85fcd4eedffaa001cb5dd8f8320665d";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
