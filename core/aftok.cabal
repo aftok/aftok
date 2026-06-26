@@ -106,6 +106,7 @@ library
     Aftok.Project
     Aftok.TimeLog
     Aftok.TimeLog.Serialization
+    Aftok.TipJar
     Aftok.Types
     Aftok.Util
     Aftok.Util.Http
@@ -139,6 +140,7 @@ Test-Suite spec
     Aftok.PaymentsSpec
     Aftok.Servant.ApiSpec
     Aftok.TimeLogSpec
+    Aftok.TipJarSpec
     Aftok.Util.HttpSpec
 
   build-depends:
