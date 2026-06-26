@@ -43,6 +43,11 @@ import Aftok.API.Projects
     SetProjectTipRequest,
   )
 import Aftok.API.Session (LoginCheckResponse)
+import Aftok.API.TipJar
+  ( TipJarInfo,
+    TipRequestBody,
+    TipRequestResult,
+  )
 import Aftok.API.Users
   ( AccountSettingsResponse,
     RegisterRequest,
@@ -331,3 +336,19 @@ instance ToSchema PasswordResetConfirm where
 -- Config
 instance ToSchema ClientConfig where
   declareNamedSchema = declareNamedSchemaViaCodec
+
+-- Tip Jar
+instance ToSchema TipJarInfo where
+  declareNamedSchema = declareNamedSchemaViaCodec
+
+instance ToSchema TipRequestBody where
+  declareNamedSchema = declareNamedSchemaViaCodec
+
+-- | 'TipRequestResult' has a manual, tagged 'ToJSON' (success vs
+-- amount-too-small), so document it as a permissive JSON object.
+instance ToSchema TipRequestResult where
+  declareNamedSchema _ =
+    pure $
+      NamedSchema
+        (Just "TipRequestResult")
+        (mempty & OA.type_ ?~ OA.OpenApiObject)
