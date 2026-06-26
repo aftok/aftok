@@ -49,7 +49,7 @@ import Lrzhs (isValidShieldedAddress)
 import Network.Mail.Mime (Mail, plainPart)
 import qualified Network.Mail.Mime as Mime
 import qualified Network.Mail.SMTP as SMTP
-import Network.Wai (requestHeaders)
+import Network.Wai (pathInfo, requestHeaders)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.Cors
   ( CorsResourcePolicy (..),
@@ -171,24 +171,44 @@ main = do
   -- corsOrigins = Just (origins, allowCredentials) - the Bool enables Access-Control-Allow-Credentials
   -- Only allow origins from the configured allowlist
   let allowedOrigins = cfg ^. corsAllowedOrigins
+      -- The public tip-jar paths (GET /api/projects/:id/tip-jar and
+      -- POST /api/projects/:id/tip-jar/request) are unauthenticated and set no
+      -- cookies, so they get an any-origin policy WITHOUT credentials.
+      isTipJar p = case p of
+        ("api" : "projects" : _ : "tip-jar" : rest) -> rest == [] || rest == ["request"]
+        _ -> False
+      publicPolicy =
+        CorsResourcePolicy
+          { corsOrigins = Nothing, -- any origin; with no credentials this is safe
+            corsMethods = ["GET", "POST", "OPTIONS"],
+            corsRequestHeaders = ["Content-Type"],
+            corsExposedHeaders = Nothing,
+            corsMaxAge = Just 86400,
+            corsVaryOrigin = True,
+            corsRequireOrigin = False,
+            corsIgnoreFailures = False
+          }
       corsPolicy = cors $ \req ->
-        let maybeOrigin = lookup "Origin" (requestHeaders req)
-            originText = decodeUtf8 <$> maybeOrigin
-            isAllowed = maybe False (`elem` allowedOrigins) originText
-         in Just
-              CorsResourcePolicy
-                { corsOrigins =
-                    if isAllowed
-                      then fmap (\origin -> ([origin], True)) maybeOrigin
-                      else Nothing, -- Deny credentials for unknown origins
-                  corsMethods = simpleMethods <> ["PUT", "DELETE", "PATCH"],
-                  corsRequestHeaders = simpleHeaders <> ["Content-Type", "X-XSRF-TOKEN", "Authorization"],
-                  corsExposedHeaders = Just ["Set-Cookie"],
-                  corsMaxAge = Just 86400, -- Cache preflight for 24 hours
-                  corsVaryOrigin = True, -- Important: vary response by Origin header
-                  corsRequireOrigin = False,
-                  corsIgnoreFailures = False
-                }
+        if isTipJar (pathInfo req)
+          then Just publicPolicy
+          else
+            let maybeOrigin = lookup "Origin" (requestHeaders req)
+                originText = decodeUtf8 <$> maybeOrigin
+                isAllowed = maybe False (`elem` allowedOrigins) originText
+             in Just
+                  CorsResourcePolicy
+                    { corsOrigins =
+                        if isAllowed
+                          then fmap (\origin -> ([origin], True)) maybeOrigin
+                          else Nothing, -- Deny credentials for unknown origins
+                      corsMethods = simpleMethods <> ["PUT", "DELETE", "PATCH"],
+                      corsRequestHeaders = simpleHeaders <> ["Content-Type", "X-XSRF-TOKEN", "Authorization"],
+                      corsExposedHeaders = Just ["Set-Cookie"],
+                      corsMaxAge = Just 86400, -- Cache preflight for 24 hours
+                      corsVaryOrigin = True, -- Important: vary response by Origin header
+                      corsRequireOrigin = False,
+                      corsIgnoreFailures = False
+                    }
       app = requestLogger $ corsPolicy $ aftokApp env btcCfg paymentsConfig rops captchaCfg pwResetOps staticDir
 
   -- Run server
