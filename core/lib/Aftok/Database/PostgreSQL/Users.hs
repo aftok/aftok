@@ -15,6 +15,8 @@ module Aftok.Database.PostgreSQL.Users
     updateUserPassword,
     setUserZcashAddress,
     findUserZcashAddress,
+    findUserZcashIVK,
+    setUserZcashIVK,
   )
 where
 
@@ -226,3 +228,47 @@ setUserZcashAddress uid addr = do
     Nothing ->
       -- Insert a new primary account row
       linkZcashAccount uid addr
+
+-- | Find a user's current primary Zcash UIVK, if set.
+findUserZcashIVK :: UserId -> DBM (Maybe Zcash.IVK)
+findUserZcashIVK uid =
+  headMay
+    <$> pquery
+      zcashIvkParser
+      [sql| SELECT zcash_ivk FROM cryptocurrency_accounts
+            WHERE user_id = ?
+            AND is_primary = true
+            AND zcash_ivk IS NOT NULL |]
+      (Only $ uid ^. _UserId)
+
+-- | Set a user's primary Zcash UIVK (event-sourced, mirrors setUserZcashAddress).
+setUserZcashIVK :: UserId -> Zcash.IVK -> DBM ()
+setUserZcashIVK uid ivk = do
+  currentIvk <- findUserZcashIVK uid
+  let ivkT = Zcash.ivkText ivk
+  void $
+    pexec
+      [sql| INSERT INTO ivk_change_events (user_id, zcash_ivk, previous_ivk)
+            VALUES (?, ?, ?) |]
+      (uid ^. _UserId, ivkT, fmap Zcash.ivkText currentIvk)
+  existing <-
+    headMay
+      <$> pquery
+        (idParser AccountId)
+        [sql| SELECT id FROM cryptocurrency_accounts
+              WHERE user_id = ? AND is_primary = true |]
+        (Only $ uid ^. _UserId)
+  case existing of
+    Just _ ->
+      void $
+        pexec
+          [sql| UPDATE cryptocurrency_accounts
+                SET zcash_ivk = ?
+                WHERE user_id = ? AND is_primary = true |]
+          (ivkT, uid ^. _UserId)
+    Nothing ->
+      void $
+        pexec
+          [sql| INSERT INTO cryptocurrency_accounts (user_id, is_primary, zcash_ivk)
+                VALUES (?, ?, ?) |]
+          (uid ^. _UserId, True, ivkT)
