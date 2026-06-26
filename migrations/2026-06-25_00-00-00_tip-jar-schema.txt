@@ -1,0 +1,27 @@
+Description: Tip jar schema — project settings, per-contributor settings, and the ivk_change_events audit table.
+Created: 2026-06-25 00:00:00.000000 UTC
+Depends: 2026-02-07_00-00-00_address-change-events
+Apply: |
+  ALTER TABLE projects ADD COLUMN tip_jar_enabled boolean NOT NULL DEFAULT false;
+  ALTER TABLE projects ADD COLUMN tip_jar_memo_template text;
+
+  ALTER TABLE project_companions ADD COLUMN tip_participate boolean NOT NULL DEFAULT false;
+  ALTER TABLE project_companions ADD COLUMN tip_min_zatoshi bigint NOT NULL DEFAULT 100000;
+  ALTER TABLE project_companions ADD COLUMN tip_show_handle boolean NOT NULL DEFAULT false;
+
+  CREATE TABLE ivk_change_events (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id uuid NOT NULL REFERENCES users(id),
+    zcash_ivk text,
+    previous_ivk text,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX idx_ivk_change_events_user ON ivk_change_events(user_id);
+Revert: |
+  DROP INDEX IF EXISTS idx_ivk_change_events_user;
+  DROP TABLE IF EXISTS ivk_change_events;
+  ALTER TABLE project_companions DROP COLUMN tip_show_handle;
+  ALTER TABLE project_companions DROP COLUMN tip_min_zatoshi;
+  ALTER TABLE project_companions DROP COLUMN tip_participate;
+  ALTER TABLE projects DROP COLUMN tip_jar_memo_template;
+  ALTER TABLE projects DROP COLUMN tip_jar_enabled;
