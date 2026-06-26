@@ -7,6 +7,13 @@ module Aftok.Project
     inceptionDate,
     initiator,
     depRules,
+    ProjectTipSettings (..),
+    ptsEnabled,
+    ptsMemoTemplate,
+    ContributorTipSettings (..),
+    ctsParticipate,
+    ctsMinZatoshi,
+    ctsShowHandle,
     InvitationCode,
     randomInvCode,
     parseInvCode,
@@ -43,6 +50,21 @@ data Project = Project
   }
 
 makeLenses ''Project
+
+data ProjectTipSettings = ProjectTipSettings
+  { _ptsEnabled :: Bool,
+    _ptsMemoTemplate :: Maybe Text
+  }
+
+data ContributorTipSettings = ContributorTipSettings
+  { _ctsParticipate :: Bool,
+    _ctsMinZatoshi :: Word64,
+    _ctsShowHandle :: Bool
+  }
+
+makeLenses ''ProjectTipSettings
+
+makeLenses ''ContributorTipSettings
 
 newtype InvitationCode = InvitationCode ByteString deriving (Eq)
 
