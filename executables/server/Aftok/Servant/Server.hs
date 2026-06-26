@@ -56,6 +56,7 @@ import Aftok.Servant.Users
     acceptInvitationHandler,
     getAccountSettingsHandler,
     setPaymentAddressHandler,
+    setUivkHandler,
     usersServer,
   )
 import Aftok.Servant.WorkLog (WorkLogAPI, workLogServer)
@@ -166,9 +167,11 @@ protectedUsersServer regOps (Authenticated user) =
   acceptInvitationHandler user
     :<|> getAccountSettingsHandler user
     :<|> setPaymentAddressHandler regOps user
+    :<|> setUivkHandler user
 protectedUsersServer _ _ =
   (\_ -> throwError err401 {errBody = "Authentication required"})
     :<|> throwError err401 {errBody = "Authentication required"}
+    :<|> (\_ -> throwError err401 {errBody = "Authentication required"})
     :<|> (\_ -> throwError err401 {errBody = "Authentication required"})
 
 -- | Create WAI Application from server

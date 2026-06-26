@@ -39,6 +39,8 @@ import Aftok.API.Projects
     ProjectInviteResponse,
     ProjectResponse,
     ProjectSummary,
+    SetContributorTipRequest,
+    SetProjectTipRequest,
   )
 import Aftok.API.Session (LoginCheckResponse)
 import Aftok.API.Users
@@ -46,6 +48,7 @@ import Aftok.API.Users
     RegisterRequest,
     RegisterResponse,
     SetPaymentAddressRequest,
+    SetUivkRequest,
     UsernameCheckResponse,
     ZAddrCheckResponse,
   )
@@ -201,6 +204,9 @@ instance ToSchema AccountSettingsResponse where
 instance ToSchema SetPaymentAddressRequest where
   declareNamedSchema = declareNamedSchemaViaCodec
 
+instance ToSchema SetUivkRequest where
+  declareNamedSchema = declareNamedSchemaViaCodec
+
 -- Session
 instance ToSchema LoginCheckResponse where
   declareNamedSchema = declareNamedSchemaViaCodec
@@ -232,6 +238,12 @@ instance ToSchema ProjectInviteResponse where
         (mempty & OA.type_ ?~ OA.OpenApiObject)
 
 instance ToSchema CommsAddress where
+  declareNamedSchema = declareNamedSchemaViaCodec
+
+instance ToSchema SetProjectTipRequest where
+  declareNamedSchema = declareNamedSchemaViaCodec
+
+instance ToSchema SetContributorTipRequest where
   declareNamedSchema = declareNamedSchemaViaCodec
 
 -- WorkLog

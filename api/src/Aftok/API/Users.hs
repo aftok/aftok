@@ -20,6 +20,7 @@ module Aftok.API.Users
     ZAddrCheckResponse (..),
     AccountSettingsResponse (..),
     SetPaymentAddressRequest (..),
+    SetUivkRequest (..),
 
     -- * Captcha Types
     CaptchaError (..),
@@ -232,6 +233,20 @@ instance HasCodec SetPaymentAddressRequest where
 
 instance FromJSON SetPaymentAddressRequest where parseJSON = parseJSONViaCodec
 
+-- | Set unified incoming viewing key (UIVK) request
+data SetUivkRequest = SetUivkRequest
+  { surUivk :: Text
+  }
+  deriving (Show, Eq, Generic)
+
+instance HasCodec SetUivkRequest where
+  codec =
+    object "SetUivkRequest" $
+      SetUivkRequest
+        <$> requiredField' "uivk" AC..= surUivk
+
+instance FromJSON SetUivkRequest where parseJSON = parseJSONViaCodec
+
 --------------------------------------------------------------------------------
 -- API Types
 --------------------------------------------------------------------------------
@@ -264,4 +279,9 @@ type ProtectedUsersAPI =
     :<|> "settings"
       :> "payment-address"
       :> ReqBody '[JSON] SetPaymentAddressRequest
+      :> Put '[JSON] NoContent
+    -- PUT /settings/uivk
+    :<|> "settings"
+      :> "uivk"
+      :> ReqBody '[JSON] SetUivkRequest
       :> Put '[JSON] NoContent

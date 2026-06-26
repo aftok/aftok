@@ -14,6 +14,7 @@ module Aftok.Servant.Users
     ZAddrCheckResponse (..),
     AccountSettingsResponse (..),
     SetPaymentAddressRequest (..),
+    SetUivkRequest (..),
     CaptchaError (..),
     CaptchaResponse (..),
     AddressInvalid (..),
@@ -31,6 +32,7 @@ module Aftok.Servant.Users
     acceptInvitationHandler,
     getAccountSettingsHandler,
     setPaymentAddressHandler,
+    setUivkHandler,
 
     -- * Configuration
     RegisterOps (..),
@@ -51,6 +53,7 @@ import Aftok.API.Users
     RegisterRequest (..),
     RegisterResponse (..),
     SetPaymentAddressRequest (..),
+    SetUivkRequest (..),
     UsernameCheckResponse (..),
     UsersAPI,
     ZAddrCheckResponse (..),
@@ -70,12 +73,13 @@ import Aftok.Database
     findUserByName,
     findUserZcashAddress,
     setUserZcashAddress,
+    setUserZcashIVK,
   )
 import Aftok.Password (hashPassword)
 import Aftok.Project (parseInvCode)
-import Aftok.Servant.App (AppM, runDB)
+import Aftok.Servant.App (AppM, envConfig, runDB)
 import Aftok.Servant.Auth (AuthenticatedUser (..))
-import Aftok.ServerConfig (CaptchaConfig (..), captchaSecretKey)
+import Aftok.ServerConfig (CaptchaConfig (..), captchaSecretKey, zcashConfig)
 import Aftok.Types
   ( Email (..),
     RecoverBy (..),
@@ -84,9 +88,12 @@ import Aftok.Types
   )
 import Control.Lens (view, (^.))
 import qualified Data.Aeson as A
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Thyme.Clock as C
+import Lrzhs (deriveOrchardAddress)
+import Lrzhs.Types (DiversifierIndex, mkDiversifierIndex)
 import Network.HTTP.Client
   ( httpLbs,
     parseRequest,
@@ -257,4 +264,34 @@ setPaymentAddressHandler ops user req = do
       throwError err400 {errBody = "Invalid Zcash address"}
     Right addr -> do
       runDB $ setUserZcashAddress uid addr
+      pure NoContent
+
+-- | Set the caller's Zcash Unified IVK (protected endpoint).
+--
+-- A UIVK is accepted only if it decodes and contains an Orchard receiver,
+-- which is verified by attempting to derive an Orchard address from it. This
+-- guarantees every stored UIVK is Orchard-capable. The UIVK is always written
+-- to the caller's own account (uid from the auth token).
+-- | The all-zero diversifier index, used only to validate that a UIVK decodes
+-- and carries an Orchard receiver. 11 zero bytes always satisfies
+-- mkDiversifierIndex's length-11 invariant, so the error is unreachable.
+zeroDiversifierIndex :: DiversifierIndex
+zeroDiversifierIndex =
+  fromMaybe (error "11 zero bytes is a valid diversifier index") (mkDiversifierIndex (BS.replicate 11 0))
+
+setUivkHandler ::
+  AuthenticatedUser ->
+  SetUivkRequest ->
+  AppM NoContent
+setUivkHandler user req = do
+  env <- ask
+  let uid = auUserId user
+      net = Zcash.zcashNetwork (env ^. envConfig . zcashConfig)
+      uivkText = surUivk req
+  res <- liftIO $ deriveOrchardAddress net uivkText zeroDiversifierIndex
+  case res of
+    Left _ ->
+      throwError err400 {errBody = "Invalid Unified IVK (must contain an Orchard receiver)"}
+    Right _ -> do
+      runDB $ setUserZcashIVK uid (Zcash.IVK uivkText)
       pure NoContent

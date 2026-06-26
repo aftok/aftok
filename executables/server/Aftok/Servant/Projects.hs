@@ -51,6 +51,8 @@ import Aftok.API.Projects
     ProjectSummary (..),
     ProjectsAPI,
     ProtectedProjectsAPI,
+    SetContributorTipRequest (..),
+    SetProjectTipRequest (..),
     SingleProjectAPI,
     cDepreciatedHours,
     cHandle,
@@ -70,16 +72,19 @@ import Aftok.API.WorkLog
 import Aftok.Config (SmtpConfig (..))
 import qualified Aftok.Currency.Zcash as Zcash
 import qualified Aftok.Currency.Zcash.Zip321 as Zip321
-import Aftok.Database (KeyedLogEntry (..), createInvitation, createProject, findUserProject, findUserProjectDetail, findUserProjects, listProjectContributors, readWorkIndex)
+import Aftok.Database (KeyedLogEntry (..), createInvitation, createProject, findUserProject, findUserProjectDetail, findUserProjects, listProjectContributors, readWorkIndex, setContributorTipSettings, setProjectTipSettings)
 import Aftok.Database.PostgreSQL (QDBM)
 import Aftok.Interval (Interval (..))
 import Aftok.Json (creditToJSON, obj)
 import Aftok.Payments (PaymentsConfig)
 import Aftok.Project
-  ( InvitationCode,
+  ( ContributorTipSettings (..),
+    InvitationCode,
     Project (..),
     ProjectName,
+    ProjectTipSettings (..),
     depRules,
+    initiator,
     projectName,
     renderInvCode,
   )
@@ -165,6 +170,8 @@ singleProjectServer payCfg authResult pid =
     :<|> projectInviteHandler authResult pid
     :<|> Auctions.projectAuctionsServer authResult pid
     :<|> Billing.projectBillablesServer payCfg authResult pid
+    :<|> setProjectTipHandler authResult pid
+    :<|> setContributorTipHandler authResult pid
 
 -- | List all projects for the authenticated user
 projectListHandler :: AuthResult AuthenticatedUser -> AppM [ProjectSummary]
@@ -354,6 +361,54 @@ projectInviteHandler (Authenticated user) pid req = do
                   Zip321._other = []
                 }
 projectInviteHandler _ _ _ =
+  throwError err401 {errBody = "Authentication required"}
+
+-- | Set project-wide tip jar settings (project initiator only).
+--
+-- Loads the project via 'findUserProject' (which scopes to projects the caller
+-- belongs to) and rejects any caller who is not the project initiator. Only the
+-- initiator may enable/disable the public tip jar or change the memo template.
+setProjectTipHandler ::
+  AuthResult AuthenticatedUser ->
+  ProjectId ->
+  SetProjectTipRequest ->
+  AppM NoContent
+setProjectTipHandler (Authenticated user) pid req = do
+  let uid = auUserId user
+  project <-
+    fromMaybeT
+      (throwError err404 {errBody = "Project not found"})
+      (mapMaybeT runDB $ findUserProject uid pid)
+  unless (project ^. initiator == uid) $
+    throwError err403 {errBody = "Only the project initiator may change tip jar settings"}
+  runDB $ setProjectTipSettings pid (ProjectTipSettings (sptEnabled req) (sptMemoTemplate req))
+  pure NoContent
+setProjectTipHandler _ _ _ =
+  throwError err401 {errBody = "Authentication required"}
+
+-- | Set the caller's own per-contributor tip jar settings (members only).
+--
+-- Confirms the caller is a contributor (companion) of the project via
+-- 'findUserProjectDetail', then writes only the caller's own row: the user id
+-- comes from the auth token and the project id from the path, never the body.
+setContributorTipHandler ::
+  AuthResult AuthenticatedUser ->
+  ProjectId ->
+  SetContributorTipRequest ->
+  AppM NoContent
+setContributorTipHandler (Authenticated user) pid req = do
+  let uid = auUserId user
+  _ <-
+    fromMaybeT
+      (throwError err403 {errBody = "Not a contributor of this project"})
+      (mapMaybeT runDB $ findUserProjectDetail uid pid)
+  runDB $
+    setContributorTipSettings
+      pid
+      uid
+      (ContributorTipSettings (sctParticipate req) (sctMinZatoshi req) (sctShowHandle req))
+  pure NoContent
+setContributorTipHandler _ _ _ =
   throwError err401 {errBody = "Authentication required"}
 
 -- | Send project invitation email

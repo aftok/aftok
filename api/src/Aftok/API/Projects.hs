@@ -24,6 +24,8 @@ module Aftok.API.Projects
     ProjectInviteRequest (..),
     ProjectInviteResponse (..),
     CommsAddress (..),
+    SetProjectTipRequest (..),
+    SetContributorTipRequest (..),
 
     -- * Lenses
     cUserId,
@@ -154,6 +156,40 @@ instance ToJSON ProjectInviteResponse where
   toJSON (ProjectInviteResponse Nothing) = A.object []
   toJSON (ProjectInviteResponse (Just r)) =
     A.object ["zip321_request" .= (A.toJSON . Zip321.toURI $ r)]
+
+-- | Set project-wide tip jar settings request (project initiator only)
+data SetProjectTipRequest = SetProjectTipRequest
+  { sptEnabled :: Bool,
+    sptMemoTemplate :: Maybe Text
+  }
+  deriving (Show, Eq, Generic)
+
+instance HasCodec SetProjectTipRequest where
+  codec =
+    object "SetProjectTipRequest" $
+      SetProjectTipRequest
+        <$> requiredField' "enabled" AC..= sptEnabled
+        <*> optionalField' "memoTemplate" AC..= sptMemoTemplate
+
+instance FromJSON SetProjectTipRequest where parseJSON = parseJSONViaCodec
+
+-- | Set per-contributor tip jar settings request (writes only the caller's own row)
+data SetContributorTipRequest = SetContributorTipRequest
+  { sctParticipate :: Bool,
+    sctMinZatoshi :: Word64,
+    sctShowHandle :: Bool
+  }
+  deriving (Show, Eq, Generic)
+
+instance HasCodec SetContributorTipRequest where
+  codec =
+    object "SetContributorTipRequest" $
+      SetContributorTipRequest
+        <$> requiredField' "participate" AC..= sctParticipate
+        <*> requiredField' "minZatoshi" AC..= sctMinZatoshi
+        <*> requiredField' "showHandle" AC..= sctShowHandle
+
+instance FromJSON SetContributorTipRequest where parseJSON = parseJSONViaCodec
 
 --------------------------------------------------------------------------------
 -- Response Types (defined after TH splices)
@@ -356,3 +392,7 @@ type SingleProjectAPI =
     :<|> "auctions" :> ProjectAuctionsAPI
     -- GET/POST /projects/:projectId/billables
     :<|> "billables" :> ProjectBillablesAPI
+    -- PUT /projects/:projectId/tip-jar/settings
+    :<|> "tip-jar" :> "settings" :> ReqBody '[JSON] SetProjectTipRequest :> Put '[JSON] NoContent
+    -- PUT /projects/:projectId/tip-jar/me
+    :<|> "tip-jar" :> "me" :> ReqBody '[JSON] SetContributorTipRequest :> Put '[JSON] NoContent

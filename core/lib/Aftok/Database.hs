@@ -124,6 +124,10 @@ data DBOp a where
   -- Zcash address operations
   SetUserZcashAddress :: UserId -> Zcash.Address -> DBOp ()
   FindUserZcashAddress :: UserId -> DBOp (Maybe Zcash.Address)
+  SetUserZcashIVK :: UserId -> Zcash.IVK -> DBOp ()
+  -- Tip-jar settings operations
+  SetProjectTipSettings :: ProjectId -> ProjectTipSettings -> DBOp ()
+  SetContributorTipSettings :: ProjectId -> UserId -> ContributorTipSettings -> DBOp ()
   RaiseDBError :: forall x y. DBError -> DBOp x -> DBOp y
 
 data InvitationError
@@ -203,6 +207,9 @@ setUserZcashAddress uid addr = liftdb $ SetUserZcashAddress uid addr
 findUserZcashAddress :: (MonadDB m) => UserId -> MaybeT m Zcash.Address
 findUserZcashAddress = MaybeT . liftdb . FindUserZcashAddress
 
+setUserZcashIVK :: (MonadDB m) => UserId -> Zcash.IVK -> m ()
+setUserZcashIVK uid ivk = liftdb $ SetUserZcashIVK uid ivk
+
 -- Password reset ops
 
 createPasswordResetToken :: (MonadDB m) => UserId -> Text -> C.UTCTime -> m PasswordResetTokenId
@@ -260,6 +267,18 @@ checkProjectAuth pid uid act = do
 listProjectContributors :: (MonadDB m) => ProjectId -> UserId -> m [(UserId, UserName, C.UTCTime)]
 listProjectContributors pid uid =
   withProjectAuth pid uid (ListProjectContributors pid)
+
+-- | Performs NO authorization. The caller (handler layer) MUST enforce access
+-- control: the project tip-jar settings require an initiator-only check, and the
+-- contributor settings require a membership check.
+setProjectTipSettings :: (MonadDB m) => ProjectId -> ProjectTipSettings -> m ()
+setProjectTipSettings pid settings = liftdb $ SetProjectTipSettings pid settings
+
+-- | Performs NO authorization. The caller (handler layer) MUST enforce access
+-- control: the project tip-jar settings require an initiator-only check, and the
+-- contributor settings require a membership check.
+setContributorTipSettings :: (MonadDB m) => ProjectId -> UserId -> ContributorTipSettings -> m ()
+setContributorTipSettings pid uid settings = liftdb $ SetContributorTipSettings pid uid settings
 
 addUserToProject ::
   (MonadDB m) => ProjectId -> InvitingUID -> InvitedUID -> m ()
