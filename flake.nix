@@ -4,7 +4,7 @@
   nixConfig.allow-import-from-derivation = true;
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/release-26.05";
     flake-utils.url = "github:numtide/flake-utils";
     dbmigrations = {
       url = "github:haskell-github-trust/dbmigrations/6d641f169b60ecb9e9de6e7e82d4bafbcaac62ff";
