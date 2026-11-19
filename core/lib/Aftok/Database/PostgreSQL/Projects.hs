@@ -10,6 +10,10 @@ module Aftok.Database.PostgreSQL.Projects
     findInvitation,
     acceptInvitation,
     listProjectContributors,
+    findProjectTipSettings,
+    setProjectTipSettings,
+    findContributorTipSettings,
+    setContributorTipSettings,
   )
 where
 
@@ -28,9 +32,11 @@ import Aftok.Database.PostgreSQL.Types
     utcParser,
   )
 import Aftok.Project
-  ( Invitation (..),
+  ( ContributorTipSettings (..),
+    Invitation (..),
     InvitationCode,
     Project (..),
+    ProjectTipSettings (..),
     depRules,
     inceptionDate,
     initiator,
@@ -188,3 +194,36 @@ listProjectContributors pid =
       ORDER BY p.joined_at
     |]
     (Only $ pid ^. _ProjectId)
+
+findProjectTipSettings :: ProjectId -> DBM (Maybe ProjectTipSettings)
+findProjectTipSettings pid =
+  fmap (uncurry ProjectTipSettings) . headMay
+    <$> pquery
+      ((,) <$> field <*> field)
+      [sql| SELECT tip_jar_enabled, tip_jar_memo_template FROM projects WHERE id = ? |]
+      (Only $ pid ^. _ProjectId)
+
+setProjectTipSettings :: ProjectId -> ProjectTipSettings -> DBM ()
+setProjectTipSettings pid (ProjectTipSettings enabled memoT) =
+  void $
+    pexec
+      [sql| UPDATE projects SET tip_jar_enabled = ?, tip_jar_memo_template = ? WHERE id = ? |]
+      (enabled, memoT, pid ^. _ProjectId)
+
+findContributorTipSettings :: ProjectId -> UserId -> DBM (Maybe ContributorTipSettings)
+findContributorTipSettings pid uid =
+  fmap (\(p, m, s) -> ContributorTipSettings p (fromIntegral (m :: Int64)) s) . headMay
+    <$> pquery
+      ((,,) <$> field <*> field <*> field)
+      [sql| SELECT tip_participate, tip_min_zatoshi, tip_show_handle
+            FROM project_companions WHERE project_id = ? AND user_id = ? |]
+      (pid ^. _ProjectId, uid ^. _UserId)
+
+setContributorTipSettings :: ProjectId -> UserId -> ContributorTipSettings -> DBM ()
+setContributorTipSettings pid uid (ContributorTipSettings p m s) =
+  void $
+    pexec
+      [sql| UPDATE project_companions
+            SET tip_participate = ?, tip_min_zatoshi = ?, tip_show_handle = ?
+            WHERE project_id = ? AND user_id = ? |]
+      (p, fromIntegral m :: Int64, s, pid ^. _ProjectId, uid ^. _UserId)

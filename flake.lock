@@ -304,17 +304,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1770504174,
-        "narHash": "sha256-blGQPV66oyEF70n2n1QECQK07TqRsKjFTT0glR+02ck=",
+        "lastModified": 1782439962,
+        "narHash": "sha256-Klzfc8yfhAKs/cxWQLCpIDrPZ/tN+DGmk2FwfbYcWwk=",
         "owner": "nuttycom",
         "repo": "lrzhs",
-        "rev": "51838a296afc0f0b8c8ec7cf0018dc12f989ecc5",
+        "rev": "110f221ca85fcd4eedffaa001cb5dd8f8320665d",
         "type": "github"
       },
       "original": {
         "owner": "nuttycom",
         "repo": "lrzhs",
-        "rev": "51838a296afc0f0b8c8ec7cf0018dc12f989ecc5",
+        "rev": "110f221ca85fcd4eedffaa001cb5dd8f8320665d",
         "type": "github"
       }
     },

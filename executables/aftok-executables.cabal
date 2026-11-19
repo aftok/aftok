@@ -94,6 +94,7 @@ Executable aftok-server
     Aftok.Servant.Session
     Aftok.Servant.Users
     Aftok.Servant.Projects
+    Aftok.Servant.TipJar
     Aftok.Servant.WorkLog
     Aftok.Servant.Auctions
     Aftok.Servant.Billing
